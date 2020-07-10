@@ -32,8 +32,6 @@ The `piggybankContract` is compiled from:
 
 const forwarderOrigin = 'http://localhost:9010'
 
-
-
 const initialize = () => {
   //You will start here 
 }

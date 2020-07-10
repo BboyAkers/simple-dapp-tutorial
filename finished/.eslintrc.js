@@ -1,34 +1,29 @@
 module.exports = {
-  parserOptions: {
-    'sourceType': 'script',
-    'ecmaVersion': 2017,
-    'ecmaFeatures': {
-      'experimentalObjectRestSpread': true,
-      'impliedStrict': true,
-      'modules': true,
-      'blockBindings': true,
-      'arrowFunctions': true,
-      'objectLiteralShorthandMethods': true,
-      'objectLiteralShorthandProperties': true,
-      'templateStrings': true,
-      'classes': true,
-    },
-  },
-
   env: {
     'browser': true,
   },
-
+  parserOptions: {
+    'ecmaVersion': 2018,
+  },
+  globals: {
+    'web3': 'readonly',
+    'ethereum': 'readonly',
+  },
   plugins: [
     'json',
   ],
-
   extends: [
     '@metamask/eslint-config',
     '@metamask/eslint-config/config/nodejs',
   ],
-
-  globals: {
-    'web3': true,
-  },
+  overrides: [{
+    'files': ['src/index.js'],
+    'parserOptions': {
+      'sourceType': 'module',
+    },
+  }],
+  ignorePatterns: [
+    '!.eslintrc.js',
+    'dist',
+  ],
 }
