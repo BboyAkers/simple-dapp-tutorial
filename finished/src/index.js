@@ -1,21 +1,28 @@
 /*
 The `piggybankContract` is compiled from:
+
   pragma solidity ^0.4.0;
   contract PiggyBank {
+
       uint private balance;
       address public owner;
+
       function PiggyBank() public {
           owner = msg.sender;
           balance = 0;
       }
+
       function deposit() public payable returns (uint) {
           balance += msg.value;
           return balance;
       }
+
       function withdraw(uint withdrawAmount) public returns (uint remainingBal) {
           require(msg.sender == owner);
           balance -= withdrawAmount;
+
           msg.sender.transfer(withdrawAmount);
+
           return balance;
       }
   }
@@ -489,7 +496,7 @@ const initialize = async () => {
     }
   }
 
-  function handleNewAccounts(newAccounts) {
+  function handleNewAccounts (newAccounts) {
     accounts = newAccounts
     accountsDiv.innerHTML = accounts
     if (isMetaMaskConnected()) {
@@ -498,15 +505,15 @@ const initialize = async () => {
     updateButtons()
   }
 
-  function handleNewChain(chainId) {
+  function handleNewChain (chainId) {
     chainIdDiv.innerHTML = chainId
   }
 
-  function handleNewNetwork(networkId) {
+  function handleNewNetwork (networkId) {
     networkDiv.innerHTML = networkId
   }
 
-  async function getNetworkAndChainId() {
+  async function getNetworkAndChainId () {
     try {
       const chainId = await ethereum.request({
         method: 'eth_chainId',
@@ -546,10 +553,11 @@ const initialize = async () => {
 
 window.addEventListener('DOMContentLoaded', initialize)
 
-function getPermissionsDisplayString(permissionsArray) {
+function getPermissionsDisplayString (permissionsArray) {
   if (permissionsArray.length === 0) {
     return 'No permissions found.'
   }
   const permissionNames = permissionsArray.map((perm) => perm.parentCapability)
   return permissionNames.reduce((acc, name) => `${acc}${name}, `, '').replace(/, $/u, '')
 }
+
