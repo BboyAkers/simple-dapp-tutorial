@@ -1,79 +1,93 @@
-/*global ethereum, MetamaskOnboarding */
-
 /*
 The `piggybankContract` is compiled from:
-
   pragma solidity ^0.4.0;
   contract PiggyBank {
-
       uint private balance;
       address public owner;
-
       function PiggyBank() public {
           owner = msg.sender;
           balance = 0;
       }
-
       function deposit() public payable returns (uint) {
           balance += msg.value;
           return balance;
       }
-
       function withdraw(uint withdrawAmount) public returns (uint remainingBal) {
           require(msg.sender == owner);
           balance -= withdrawAmount;
-
           msg.sender.transfer(withdrawAmount);
-
           return balance;
       }
   }
 */
 
-const forwarderOrigin = 'http://localhost:9010'
+import { encrypt } from 'eth-sig-util'
+import MetaMaskOnboarding from '@metamask/onboarding'
+
+const currentUrl = new URL(window.location.href)
+const forwarderOrigin = currentUrl.hostname === 'localhost'
+  ? 'http://localhost:9010'
+  : undefined
 
 const isMetaMaskInstalled = () => {
-  return Boolean(window.ethereum && window.ethereum.isMetaMask)
+  const { ethereum } = window
+  return Boolean(ethereum && ethereum.isMetaMask)
 }
-  //Dapp Status Section
-  const networkDiv = document.getElementById('network')
-  const chainIdDiv = document.getElementById('chainId')
-  const accountsDiv = document.getElementById('accounts')
 
-  //Basic Actions Section
-  const onboardButton = document.getElementById('connectButton')
-  const getAccountsButton = document.getElementById('getAccounts')
-  const getAccountsResults = document.getElementById('getAccountsResult')
+// Dapp Status Section
+const networkDiv = document.getElementById('network')
+const chainIdDiv = document.getElementById('chainId')
+const accountsDiv = document.getElementById('accounts')
 
-  //Contract Section
-  const deployButton = document.getElementById('deployButton')
-  const depositButton = document.getElementById('depositButton')
-  const withdrawButton = document.getElementById('withdrawButton')
-  const contractStatus = document.getElementById('contractStatus')
+// Basic Actions Section
+const onboardButton = document.getElementById('connectButton')
+const getAccountsButton = document.getElementById('getAccounts')
+const getAccountsResults = document.getElementById('getAccountsResult')
 
-  //Send Eth Section
-  const sendButton = document.getElementById('sendButton')
+// Permissions Actions Section
+const requestPermissionsButton = document.getElementById('requestPermissions')
+const getPermissionsButton = document.getElementById('getPermissions')
+const permissionsResult = document.getElementById('permissionsResult')
 
-  //Send Tokens Section
-  const tokenAddress = document.getElementById('tokenAddress')
-  const createToken = document.getElementById('createToken')
-  const transferTokens = document.getElementById('transferTokens')
-  const approveTokens = document.getElementById('approveTokens')
-  const transferTokensWithoutGas = document.getElementById('transferTokensWithoutGas')
-  const approveTokensWithoutGas = document.getElementById('approveTokensWithoutGas')
+// Contract Section
+const deployButton = document.getElementById('deployButton')
+const depositButton = document.getElementById('depositButton')
+const withdrawButton = document.getElementById('withdrawButton')
+const contractStatus = document.getElementById('contractStatus')
 
-  //Signed Type Data Section
-  const signTypedData = document.getElementById('signTypedData')
-  const signTypedDataResults = document.getElementById('signTypedDataResult')
+// Send Eth Section
+const sendButton = document.getElementById('sendButton')
 
-const initialize = () => {
+// Send Tokens Section
+const tokenAddress = document.getElementById('tokenAddress')
+const createToken = document.getElementById('createToken')
+const transferTokens = document.getElementById('transferTokens')
+const approveTokens = document.getElementById('approveTokens')
+const transferTokensWithoutGas = document.getElementById('transferTokensWithoutGas')
+const approveTokensWithoutGas = document.getElementById('approveTokensWithoutGas')
+
+// Signed Type Data Section
+const signTypedData = document.getElementById('signTypedData')
+const signTypedDataResults = document.getElementById('signTypedDataResult')
+
+// Encrypt / Decrypt Section
+const getEncryptionKeyButton = document.getElementById('getEncryptionKeyButton')
+const encryptMessageInput = document.getElementById('encryptMessageInput')
+const encryptButton = document.getElementById('encryptButton')
+const decryptButton = document.getElementById('decryptButton')
+const encryptionKeyDisplay = document.getElementById('encryptionKeyDisplay')
+const ciphertextDisplay = document.getElementById('ciphertextDisplay')
+const cleartextDisplay = document.getElementById('cleartextDisplay')
+
+const initialize = async () => {
 
   let onboarding
   try {
-    onboarding = new MetamaskOnboarding({ forwarderOrigin })
+    onboarding = new MetaMaskOnboarding({ forwarderOrigin })
   } catch (error) {
     console.error(error)
   }
+
   let accounts
   let piggybankContract
   let accountButtonsInitialized = false
@@ -89,24 +103,36 @@ const initialize = () => {
     transferTokensWithoutGas,
     approveTokensWithoutGas,
     signTypedData,
+    getEncryptionKeyButton,
+    encryptMessageInput,
+    encryptButton,
+    decryptButton,
   ]
 
   const isMetaMaskConnected = () => accounts && accounts.length > 0
-
-
-
-  const onClickConnect = async () => {
-    try {
-      await ethereum.enable()
-    } catch (error) {
-      console.error(error)
-    }
-  }
 
   const onClickInstall = () => {
     onboardButton.innerText = 'Onboarding in progress'
     onboardButton.disabled = true
     onboarding.startOnboarding()
+  }
+
+  const onClickConnect = async () => {
+    try {
+      const newAccounts = await ethereum.request({
+        method: 'eth_requestAccounts',
+      })
+      handleNewAccounts(newAccounts)
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  const clearTextDisplays = () => {
+    encryptionKeyDisplay.innerText = ''
+    encryptMessageInput.value = ''
+    ciphertextDisplay.innerText = ''
+    cleartextDisplay.innerText = ''
   }
 
   const updateButtons = () => {
@@ -115,11 +141,13 @@ const initialize = () => {
       for (const button of accountButtons) {
         button.disabled = true
       }
+      clearTextDisplays()
     } else {
       deployButton.disabled = false
       sendButton.disabled = false
       createToken.disabled = false
       signTypedData.disabled = false
+      getEncryptionKeyButton.disabled = false
     }
 
     if (!isMetaMaskInstalled()) {
@@ -145,6 +173,10 @@ const initialize = () => {
       return
     }
     accountButtonsInitialized = true
+
+    /**
+     * Contract Interactions
+     */
 
     piggybankContract = web3.eth.contract([{ 'constant': false, 'inputs': [{ 'name': 'withdrawAmount', 'type': 'uint256' }], 'name': 'withdraw', 'outputs': [{ 'name': 'remainingBal', 'type': 'uint256' }], 'payable': false, 'stateMutability': 'nonpayable', 'type': 'function' }, { 'constant': true, 'inputs': [], 'name': 'owner', 'outputs': [{ 'name': '', 'type': 'address' }], 'payable': false, 'stateMutability': 'view', 'type': 'function' }, { 'constant': false, 'inputs': [], 'name': 'deposit', 'outputs': [{ 'name': '', 'type': 'uint256' }], 'payable': true, 'stateMutability': 'payable', 'type': 'function' }, { 'inputs': [], 'payable': false, 'stateMutability': 'nonpayable', 'type': 'constructor' }])
     deployButton.onclick = async () => {
@@ -196,6 +228,10 @@ const initialize = () => {
       console.log(piggybank)
     }
 
+    /**
+     * Sending ETH
+     */
+
     sendButton.onclick = () => {
       web3.eth.sendTransaction({
         from: accounts[0],
@@ -207,6 +243,10 @@ const initialize = () => {
         console.log(result)
       })
     }
+
+    /**
+     * ERC20 Token
+     */
 
     createToken.onclick = () => {
       const _initialAmount = 100
@@ -291,7 +331,11 @@ const initialize = () => {
       )
     }
 
-    signTypedData.onclick = () => {
+    /**
+     * Sign Typed Data
+     */
+
+    signTypedData.onclick = async () => {
       const networkId = parseInt(networkDiv.innerHTML, 10)
       const chainId = parseInt(chainIdDiv.innerHTML, 10) || networkId
 
@@ -332,32 +376,120 @@ const initialize = () => {
           contents: 'Hello, Bob!',
         },
       }
-      ethereum.sendAsync({
-        method: 'eth_signTypedData_v3',
-        params: [ethereum.selectedAddress, JSON.stringify(typedData)],
-        from: ethereum.selectedAddress,
-      }, (err, result) => {
-        if (err) {
-          console.log(err)
-        } else {
-          signTypedDataResults.innerHTML = JSON.stringify(result)
-        }
-      })
+
+      try {
+        const result = await ethereum.request({
+          method: 'eth_signTypedData_v3',
+          params: [accounts[0], JSON.stringify(typedData)],
+        })
+        signTypedDataResults.innerHTML = JSON.stringify(result)
+      } catch (err) {
+        console.error(err)
+      }
     }
 
-    getAccountsButton.onclick = () => {
-      ethereum.sendAsync({ method: 'eth_accounts' }, (error, response) => {
-        if (error) {
-          console.error(error)
-          getAccountsResults.innerHTML = `Error: ${error}`
-        } else {
-          getAccountsResults.innerHTML = response.result[0] || 'Not able to get accounts'
+    /**
+     * Permissions
+     */
+
+    requestPermissionsButton.onclick = async () => {
+      try {
+        const permissionsArray = await ethereum.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }],
+        })
+        permissionsResult.innerHTML = getPermissionsDisplayString(permissionsArray)
+      } catch (err) {
+        console.error(err)
+        permissionsResult.innerHTML = `Error: ${err.message}`
+      }
+    }
+
+    getPermissionsButton.onclick = async () => {
+      try {
+        const permissionsArray = await ethereum.request({
+          method: 'wallet_getPermissions',
+        })
+        permissionsResult.innerHTML = getPermissionsDisplayString(permissionsArray)
+      } catch (err) {
+        console.error(err)
+        permissionsResult.innerHTML = `Error: ${err.message}`
+      }
+    }
+
+    getAccountsButton.onclick = async () => {
+      try {
+        const _accounts = await ethereum.request({
+          method: 'eth_accounts',
+        })
+        getAccountsResults.innerHTML = _accounts[0] || 'Not able to get accounts'
+      } catch (err) {
+        console.error(err)
+        getAccountsResults.innerHTML = `Error: ${err.message}`
+      }
+    }
+
+    /**
+     * Encrypt / Decrypt
+     */
+
+    getEncryptionKeyButton.onclick = async () => {
+      try {
+        encryptionKeyDisplay.innerText = await ethereum.request({
+          method: 'eth_getEncryptionPublicKey',
+          params: [accounts[0]],
+        })
+        encryptMessageInput.disabled = false
+      } catch (error) {
+        encryptionKeyDisplay.innerText = `Error: ${error.message}`
+        encryptMessageInput.disabled = true
+        encryptButton.disabled = true
+        decryptButton.disabled = true
+      }
+    }
+
+    encryptMessageInput.onkeyup = () => {
+      if (
+        !getEncryptionKeyButton.disabled &&
+        encryptMessageInput.value.length > 0
+      ) {
+        if (encryptButton.disabled) {
+          encryptButton.disabled = false
         }
-      })
+      } else if (!encryptButton.disabled) {
+        encryptButton.disabled = true
+      }
+    }
+
+    encryptButton.onclick = () => {
+      try {
+        ciphertextDisplay.innerText = web3.toHex(JSON.stringify(
+          encrypt(
+            encryptionKeyDisplay.innerText,
+            { 'data': encryptMessageInput.value },
+            'x25519-xsalsa20-poly1305',
+          ),
+        ))
+        decryptButton.disabled = false
+      } catch (error) {
+        ciphertextDisplay.innerText = `Error: ${error.message}`
+        decryptButton.disabled = true
+      }
+    }
+
+    decryptButton.onclick = async () => {
+      try {
+        cleartextDisplay.innerText = await ethereum.request({
+          method: 'eth_decrypt',
+          params: [ciphertextDisplay.innerText, ethereum.selectedAddress],
+        })
+      } catch (error) {
+        cleartextDisplay.innerText = `Error: ${error.message}`
+      }
     }
   }
 
-  const handleNewAccounts = (newAccounts) => {
+  function handleNewAccounts(newAccounts) {
     accounts = newAccounts
     accountsDiv.innerHTML = accounts
     if (isMetaMaskConnected()) {
@@ -366,40 +498,58 @@ const initialize = () => {
     updateButtons()
   }
 
-  const handleNewChain = (chainId) => {
+  function handleNewChain(chainId) {
     chainIdDiv.innerHTML = chainId
   }
 
-  const handleNewNetwork = (networkId) => {
+  function handleNewNetwork(networkId) {
     networkDiv.innerHTML = networkId
   }
 
-  const getNetworkAndChainId = () => {
-    ethereum.sendAsync({ method: 'eth_chainId' }, (err, response) => {
-      if (err) {
-        console.error(err)
-      } else {
-        handleNewChain(response.result)
-      }
-    })
+  async function getNetworkAndChainId() {
+    try {
+      const chainId = await ethereum.request({
+        method: 'eth_chainId',
+      })
+      handleNewChain(chainId)
 
-    ethereum.sendAsync({ method: 'net_version' }, (err, response) => {
-      if (err) {
-        console.error(err)
-      } else {
-        handleNewNetwork(response.result)
-      }
-    })
+      const networkId = await ethereum.request({
+        method: 'net_version',
+      })
+      handleNewNetwork(networkId)
+    } catch (err) {
+      console.error(err)
+    }
   }
 
   updateButtons()
 
   if (isMetaMaskInstalled()) {
+
     ethereum.autoRefreshOnNetworkChange = false
     getNetworkAndChainId()
-    ethereum.on('chainIdChanged', handleNewChain)
+
+    ethereum.on('chainChanged', handleNewChain)
     ethereum.on('networkChanged', handleNewNetwork)
     ethereum.on('accountsChanged', handleNewAccounts)
+
+    try {
+      const newAccounts = await ethereum.request({
+        method: 'eth_accounts',
+      })
+      handleNewAccounts(newAccounts)
+    } catch (err) {
+      console.error('Error on init when getting accounts', err)
+    }
   }
 }
+
 window.addEventListener('DOMContentLoaded', initialize)
+
+function getPermissionsDisplayString(permissionsArray) {
+  if (permissionsArray.length === 0) {
+    return 'No permissions found.'
+  }
+  const permissionNames = permissionsArray.map((perm) => perm.parentCapability)
+  return permissionNames.reduce((acc, name) => `${acc}${name}, `, '').replace(/, $/u, '')
+}
