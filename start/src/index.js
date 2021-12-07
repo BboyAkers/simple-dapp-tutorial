@@ -1,5 +1,4 @@
-/*global ethereum, MetamaskOnboarding */
-
+import MetaMaskOnboarding from '@metamask/onboarding';
 /*
 The `piggybankContract` is compiled from:
 
@@ -30,9 +29,10 @@ The `piggybankContract` is compiled from:
   }
 */
 
-const forwarderOrigin = 'http://localhost:9010'
 
-const initialize = () => {
+const initialize = async () => {
   //You will start here 
 }
+
 window.addEventListener('DOMContentLoaded', initialize)
+
